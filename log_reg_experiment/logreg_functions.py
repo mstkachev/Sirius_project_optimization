@@ -54,21 +54,43 @@ def regularizer(w: np.ndarray):
 def regularizer_grad(w):
     return 2*w /(1 + w**2)**2
 
-def sample_logreg_sgrad(w, X, y, la, batch):
+def sample_logreg_sgrad(w, X, y, la, i_batch):
     """
     Returns minibatch stochastic gradient
     :param w: target variable
     :param X: data matrix
     :param y: label column
     :param la: regularization parameter
-    :param batch: batch_size
+    :param i_batch: indices of batch of datasamples
     :return:
     """
     assert la >= 0
     n, d = X.shape
     assert(len(w) == d)
     assert(len(y) == n)
-    grad_sum = np.zeros(d)
-    i_batch = np.random.choice(n, batch)
-    assert(i_batch == batch)
-    return np.sum(logreg_sgrad(w, X[i_batch], y[i_batch], la))/batch + la * regularizer_grad(w)
+
+    return np.sum(logreg_sgrad(w, X[i_batch], y[i_batch], la))/len(i_batch) + la * regularizer_grad(w)
+
+
+
+def sample_matrix_logreg_sgrad(W, X, y, la, i_batch):
+    """
+    Returns matrix of minibatches.
+    :param W: matrix of target variables. Each row corresponds to the particular worker
+    :param X: data matrix
+    :param y: label column
+    :param la: regularization parameter
+    :param i_batch: indices of batch of datasamples
+    :return: matrix of minibatch stochastic gradients
+    """
+    V = np.full(W.shape, np.nan)
+    if len(X.shape ==2):#(matrix) homogeneus case
+        for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
+            V[i] = sample_logreg_sgrad(W[i], X, y, la, i_batch)
+
+    elif len(X.shape ==3): #(tenzor) heterogeneus case
+        for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
+            V[i] = sample_logreg_sgrad(W[i], X[i], y, la, i_batch)
+    else:
+        raise ValueError("W has to be 2d or 3d")
+    return V
