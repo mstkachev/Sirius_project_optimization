@@ -35,11 +35,11 @@ def logreg_grad(w, X, y, la):
 def logreg_sgrad(w, x_i, y_i, la):
     """
     Returns one stochastic gradient
-    :param w:
-    :param x_i:
-    :param y_i:
-    :param la:
-    :return:
+    :param w: target variable
+    :param x_i: i-th row if the data matrix, i.e. A[i,:]
+    :param y_i: i-th label corresponding to the i-th row if the data matrix
+    :param la: regularization parameter
+    :return: one stochastic gradient
     """
     assert (la >= 0)
     assert (len(w) == len(x_i))
@@ -57,11 +57,11 @@ def regularizer_grad(w):
 def sample_logreg_sgrad(w, X, y, la, batch):
     """
     Returns minibatch stochastic gradient
-    :param w:
-    :param X:
-    :param y:
-    :param la:
-    :param batch:
+    :param w: target variable
+    :param X: data matrix
+    :param y: label column
+    :param la: regularization parameter
+    :param batch: batch_size
     :return:
     """
     assert la >= 0
@@ -72,6 +72,3 @@ def sample_logreg_sgrad(w, X, y, la, batch):
     i_batch = np.random.choice(n, batch)
     assert(i_batch == batch)
     return np.sum(logreg_sgrad(w, X[i_batch], y[i_batch], la))/batch + la * regularizer_grad(w)
-
-
-

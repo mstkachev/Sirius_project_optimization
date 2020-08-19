@@ -16,19 +16,15 @@ parser.add_argument('--max_it', action='store', dest='max_it', type=int, help='M
 parser.add_argument('--max_t', action='store', dest='max_t', type=float, help='Time limit')
 
 parser.add_argument('--batch', action='store', dest='batch', type=int, default=1, help='Minibatch size')
-parser.add_argument('--step_type', action='store', dest='step_type', type=str, default="optimal", help='optimal or non-optimal')
-parser.add_argument('--step_size', action='store', dest='step_size', type=float, default=None, help='step_size')
+
+parser.add_argument('--num_workers', action='store', dest='num_workers', type=int, default=10, help='Number of workers')
+
+parser.add_argument('--num_local_steps', action='store', dest='num_local_steps', type=int, default=10, help='Number of local steps for each client')
+
+parser.add_argument('--continue', action='store', dest='is_continue', type=int, default=0, help='Continue or restart')
 
 parser.add_argument('--dataset', action='store', dest='dataset', type=str, default='mushrooms',
                     help='Dataset name for saving logs')
-
-parser.add_argument('--loss_func', action='store', dest='loss_func', type=str, default='quadratic',
-                    help='loss function ')
-parser.add_argument('--sampling_kind', action='store', dest='sampling_kind', type=str, default='uniform',
-                    help='block or nonblock')
-
-parser.add_argument('--scaled', action='store', dest='scaled', type=str, default='non-scaled',
-                    help='scaled or non-scaled')
 
 parser.add_argument('--launch_number', action='store', dest='launch_number', type=int, default=1, help='launch_number')
 
@@ -40,8 +36,10 @@ max_it = args.max_it
 max_t = args.max_t
 
 batch = args.batch
+num_workers = args.num_workers
+num_local_steps = args.num_local_steps
+
 dataset = args.dataset
-loss_func = args.loss_func
 
 step_size = args.step_size
 launch_number = args.launch_number
@@ -52,7 +50,6 @@ tolerance = args.tolerance
 #
 #
 # dataset = "mushrooms"
-# loss_func = "quadratic"
 # sampling_kind = "uniform"
 # batch = 50
 # max_it =812400000
@@ -71,6 +68,14 @@ if max_t is None:
     max_t = np.inf
 if (max_it is np.inf) and (max_t is np.inf):
     raise ValueError('At least one stopping criterion must be specified')
+
+assert (batch >= 1)
+assert (num_workers >= 1)
+assert (num_local_steps >= 1)
+assert (launch_number >= 1)
+assert (convergense_eps >0 )
+assert (is_continue in [0,1])
+
 
 def myrepr(x):
     return repr(round(x, 2)).replace('.',',') if isinstance(x, float) else repr(x)
