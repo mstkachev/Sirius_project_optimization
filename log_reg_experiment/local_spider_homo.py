@@ -105,7 +105,9 @@ def init_stepsize(X, la, num_local_steps):
     n, d = X.shape
     la_max = scipy.linalg.eigh(a=(X.T @ X), eigvals_only=True, turbo=True, type=1, eigvals=(d - 1, d - 1))
     L = (1 / (4 * n)) * la_max + la * 2 #lipshitz constant
-    return 1/(8 * num_local_steps * L)
+
+    #return 1/(8 * num_local_steps * L)  #stepsize given by the original paper Parallel Restarted SPIDER (PRS stepsize)
+    return 1 / (np.sqrt(n) * L)          #stepsize given by spider boost paper (SP stepsize)
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
