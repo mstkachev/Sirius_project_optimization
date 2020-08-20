@@ -13,6 +13,7 @@ project_path = os.getcwd() + "/"
 experiment_name_ar = ["local_spider_homo"]
 dataset_ar = ["mushrooms"]
 loss_func = "log-reg"
+
 batch_ar = [10]
 LAUNCH_NUMBERS = 2
 launch_number_ar = np.arange(1, LAUNCH_NUMBERS)
@@ -31,7 +32,7 @@ info_num_ar = {}
 loss_ar = {}
 epochs_ar = {}
 its_comm_ar = {}
-w_ar = {}
+f_grad_norms_ar = {}
 label_ar = {}
 
 experiment_name = "local_spider_homo"
@@ -39,7 +40,6 @@ experiment_name = "local_spider_homo"
 experiments = []
 for i, (experiment_name, dataset, num_workers, num_local_steps, batch_size) in \
         enumerate(itertools.product(experiment_name_ar, dataset_ar, num_workers_ar, num_local_steps_ar, batch_ar)):
-
 
     if experiment_name in experiments:
         continue
@@ -55,7 +55,7 @@ for i, (experiment_name, dataset, num_workers, num_local_steps, batch_size) in \
     id_func = "{0}_{1}".format(dataset, loss_func)  #####
     id_dataset = "{0}".format(dataset)  #####
 
-    logs_path = project_path + "logs/logs1_{0}_{1}/".format(dataset, experiment)
+    logs_path = project_path + "logs1_{0}_{1}/".format(dataset, experiment)
     data_path = project_path + "data_{0}/".format(dataset)
     plot_path = project_path + "plot_{0}/".format(dataset)
 
@@ -69,7 +69,7 @@ for i, (experiment_name, dataset, num_workers, num_local_steps, batch_size) in \
         raise ValueError("cannot load data_info.npy")
 
     if os.path.isfile(logs_path + 'norms' + "_" + experiment + ".npy"):
-        f_grad_norms = np.load(logs_path + 'norms' + '_' + experiment + ".npy")
+        f_grad_norms_ar[id_str] = np.load(logs_path + 'norms' + '_' + experiment + ".npy")
     else:
         raise ValueError("cannot load norms info")
 
@@ -136,16 +136,14 @@ for j, batch in enumerate(batch_ar):
     n_iter = []
     for i, (experiment_name, dataset, num_workers, num_local_steps, batch_size) in \
             enumerate(itertools.product(experiment_name_ar, dataset_ar, num_workers_ar, num_local_steps_ar, batch_ar)):
-
         experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
 
         id_label = experiment
         id_str = "{0}_{1}".format(dataset, experiment)
         label = id_label
-        n_iter.append(its_ar[id_str].shape[0])
+        n_iter.append(its_comm_ar[id_str].shape[0])
 
-    n_iter_ar[batch] = int(1.2 * min(n_iter))
-    n_iter_time_ar[batch] = 1.2 * min(n_iter_time)
+    # n_iter_ar[batch] = int(1.2 * min(n_iter))
 
 experiments = []
 fig = plt.figure()
@@ -153,7 +151,7 @@ fig = plt.figure()
 ####################################################################################################################################################################################
 legend_data = []
 line_labels = []
-marker_size = 40
+marker_size = 20
 
 for j, batch in enumerate(batch_ar):
     for i, (experiment_name, dataset, num_workers, num_local_steps, batch_size) in \
@@ -161,98 +159,55 @@ for j, batch in enumerate(batch_ar):
 
         # print (experiment_name, dataset, loss_func, sampling_kind, step_type, batch)
 
-        if (experiment_name[:2] == "LS"):
-            experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, loss_func, sampling_kind, batch)
-            id_label = "{0}_{1}_{2}".format(experiment_name, sampling_kind, batch)
-        elif (experiment_name[:5] == "NSYNC"):
-            experiment = '{0}_{1}_{2}_{3}_{4}'.format(experiment_name, loss_func, sampling_kind, step_type, batch)
-            id_label = "{0}_{1}_{2}_{3}".format(experiment_name, sampling_kind, step_type, batch)
-        else:
-            raise ValueError("wrong experiment_name")
-
-        if experiment in experiments:
+        if experiment_name in experiments:
             continue
         else:
-            experiments.append(experiment)
+            experiments.append(experiment_name)
+
+        experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
+
+        id_label = experiment
+        label = id_label
 
         id_str = "{0}_{1}".format(dataset, experiment)  #####
         id_func = "{0}_{1}".format(dataset, loss_func)  #####
         id_dataset = "{0}".format(dataset)  #####
 
+        logs_path = project_path + "logs1_{0}_{1}/".format(dataset, experiment)
+        data_path = project_path + "data_{0}/".format(dataset)
+
         if x_axis == "epochs":
             plt.xlabel('epochs')
             if ((id_str in epochs_ar) and id_str in loss_ar):
-                loss_f_min = loss_ar[id_str] - f_min_ar[id_func]
 
-                if (experiment_name[:2] == "LS"):
-                    markers_on = np.unique(epochs_ar[id_str].astype(int))
-                    markers_on = its_ar[id_str][its_ar[id_str] % 20000 == 0]
+                markers_on = its_comm_ar[id_str][its_comm_ar[id_str] % 20000 == 0]
 
-                elif (experiment_name[:5] == "NSYNC"):
-                    markers_on = its_ar[id_str][its_ar[id_str] % 1000 == 0]
-                else:
-                    raise ValueError("wrong experiment_name")
-
-                # markers_on = its_ar[id_str][its_ar[id_str]%(int(n_iter/20))==0 ]
-                # print (markers_on)
-                plt.plot(epochs_ar[id_str], loss_f_min, color=color_ar[id_label], marker=marker_ar[id_label],
+                plt.plot(epochs_ar[id_str], f_grad_norms_ar[id_str], color=color_ar[id_label],
+                         marker=marker_ar[id_label],
                          markersize=marker_size, markevery=list(markers_on), label=label_ar[id_label])
             else:
                 raise ValueError("can not plot")
         elif x_axis == "iter":
-            plt.xlabel('iterations')
-            if ((id_str in its_ar) and id_str in loss_ar):
-                # print (1)
-                loss_f_min = loss_ar[id_str] - f_min_ar[id_func]
+            plt.xlabel('communications')
+            if ((id_str in its_comm_ar) and id_str in loss_ar):
 
-                # loss_f_min = loss_f_min[loss_f_min > 0]
-                # its_ar[id_str] = its_ar[id_str][:loss_f_min.shape[0]]
-                # its_ar[id_str] = its_ar[id_str][:n_iter_ar[batch]]
-                loss_f_min = loss_f_min[:its_ar[id_str].shape[0]]
-
-                markers_on = its_ar[id_str][its_ar[id_str] % (int(len(its_ar[id_str][:-(1 + 2 * i)]) / 10)) == 0]
-
-                # print (id_str, its_ar[id_str].shape, loss_f_min.shape, loss_f_min[-3:])
-                # print (its_ar[id_str].shape, markers_on)
+                markers_on = its_comm_ar[id_str][
+                    its_comm_ar[id_str] % (int(len(its_comm_ar[id_str][:-(1 + 2 * i)]) / 10)) == 0]
                 legend_data.append(
-                    plt.plot(its_ar[id_str], loss_f_min, color=color_ar[id_label], marker=marker_ar[id_label],
+                    plt.plot(its_comm_ar[id_str], f_grad_norms_ar[id_str], color=color_ar[id_label],
+                             marker=marker_ar[id_label],
                              markersize=marker_size, markevery=list(markers_on), label=label_ar[id_label])[0])
                 line_labels.append(label_ar[id_label])
             else:
                 raise ValueError("can not plot")
-        elif x_axis == "time":
-            plt.xlabel('time, sec')
-            if ((id_str in time_ar) and id_str in loss_ar):
-                loss_f_min = loss_ar[id_str] - f_min_ar[id_func]
 
-                # loss_f_min = loss_f_min[loss_f_min > tol]
-                time_ar[id_str] = time_ar[id_str][time_ar[id_str] <= n_iter_time_ar[batch]]
-                loss_f_min = loss_f_min[:time_ar[id_str].shape[0]]
-                its_ar[id_str] = its_ar[id_str][:time_ar[id_str].shape[0]]
-
-                markers_on = its_ar[id_str][its_ar[id_str] % (int(len(its_ar[id_str][:-1]) / 10)) == 0]
-
-                # print (id_str, its_ar[id_str].shape, markers_on)
-                # print (id_str, its_ar[id_str].shape, loss_f_min.shape, loss_f_min[-3:])
-
-                plt.plot(time_ar[id_str], loss_f_min, color=color_ar[id_label], marker=marker_ar[id_label],
-                         markersize=marker_size, markevery=list(markers_on),
-                         label=label_ar[id_label])
-            else:
-                raise ValueError("can not plot")
-        else:
-            ValueError("wrong x_axis")
-
-    # epoch = epochs_ar["mushrooms_LS_non-scaled_log-reg_importance_acd_{0}".format(5)]
-    # plt.xticks(np.arange(np.int(min(epoch)),
-    #            np.int(max(epoch))+1, 5))
-    # plt.subplot(2, 2, j+1)
-    # print(j)
     plt.rcParams["figure.figsize"] = [26, 20]
+    # plt.rcParams["figure.figsize"] = [26, 20]
+
     if j == 0:
         plt.ylabel(r"$f(x) - f(x^*)$")
 
-    size = 140
+    size = 20
     title = r"${0}$".format(loss_func)
     plt.rcParams['font.family'] = 'serif'
     plt.rcParams['font.serif'] = 'FreeSerif'
@@ -264,21 +219,29 @@ for j, batch in enumerate(batch_ar):
 
     plt.rcParams['axes.titlesize'] = size  # 40
     plt.rcParams['axes.labelsize'] = size  # 40
-    # plt.rcParams["figure.figsize"] = [13,9]
+    plt.rcParams["figure.figsize"] = [13, 9]
     plt.yscale('log')
     # plt.xscale('log')
+    dataset = "mushrooms"
     plt.title(r"$\tau = {0}; {1}$".format(batch, dataset))
-    plt.ticklabel_format(axis='x', style='sci', scilimits=(1, 4))
+    # plt.ticklabel_format(axis='y', style='sci', scilimits=(1, 4))
+    # plt.ticklabel_format(axis='x', style='sci', scilimits=(1, 4))
     #
 
     plt.tight_layout()
-    legend = plt.legend(loc="lower center", framealpha=0.5, ncol=3, bbox_to_anchor=(0.45, -1.2))
-    plt.savefig(
-        plot_path + "{0}_{1}_{2}_{3}_{4}_{5}.pdf".format('-'.join(experiment_name_ar), '-'.join(sampling_kind_ar),
-                                                         '-'.join(step_type_ar), x_axis, loss_func, batch))
+    plot_path = project_path + "plot_{0}/".format(dataset)
+
+    legend = plt.legend(loc="lower center", framealpha=0.5)
+
+    # legend = plt.legend(loc="lower center", framealpha=0.5, ncol=3, bbox_to_anchor=(0.45, -1.2))
+    plt.savefig(plot_path + "{0}_{1}_{2}_{3}_{4}_{5}.pdf".format('-'.join(experiment_name_ar),
+                                                                 '-'.join(batch_ar),
+                                                                 '-'.join(num_workers_ar),
+                                                                 '-'.join(num_local_steps_ar),
+                                                                 x_axis, loss_func))
     plt.show()
     # plt.savefig(plot_path + "{0}_{1}_{2}_{3}.pdf".format('-'.join(experiment_name_ar), x_axis, loss_func, batch))
-export_legend(legend)
+    # export_legend(legend)
 
 # plt.savefig(plot_path + "{0}_{1}_{2}.pdf".format('-'.join(experiment_name_ar), x_axis, loss_func))
 
