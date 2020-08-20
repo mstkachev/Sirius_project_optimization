@@ -51,8 +51,8 @@ is_continue = args.is_continue #means that we want (or do not want) to continue 
 launch_number = args.launch_number
 tolerance = args.tolerance
 
+#debug section
 """
-debug section
 max_it = 100
 batch_size = 10
 num_workers = 20
@@ -60,16 +60,16 @@ epoch_size = None
 num_local_steps = 10
 dataset = "mushrooms"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
-
 launch_number = 1
 tolerance = 1e-16
+"""
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
 
 #first_data_save = 1 # required flag when we save data first time
 
 loss_func = "log-reg"
-"""
+
 
 convergense_eps = tolerance
 
@@ -288,7 +288,7 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
             loss.append(logreg_loss(w_avg, X, y, la))
             epochs.append(global_it + t/epoch_size)
             if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:
-                print("global_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),global_it))
+                print("{4}, global_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),global_it, experiment))
             if it_comm % NUM_GLOBAL_STEPS == 0:
                 #TODO: implement function below
                 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
