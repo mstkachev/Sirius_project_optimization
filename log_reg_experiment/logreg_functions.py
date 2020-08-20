@@ -41,9 +41,10 @@ def logreg_sgrad(w, x_i, y_i, la):
     :param la: regularization parameter
     :return: one stochastic gradient
     """
-    assert (la >= 0)
-    assert (len(w) == len(x_i))
-    assert y_i in [-1, 1]
+    assert la >= 0
+    #assert len(w) == len(x_i)
+    #assert y_i in [-1, 1]
+
     loss_sgrad = - y_i * x_i / (1 + np.exp(y_i * np.dot(x_i, w)))
     assert len(loss_sgrad) == len(w)
     return loss_sgrad
@@ -68,10 +69,11 @@ def sample_logreg_sgrad(w, X, y, la, i_batch):
     n, d = X.shape
     assert(len(w) == d)
     assert(len(y) == n)
+    grad_sum = 0
+    for i in i_batch:
+        grad_sum += logreg_sgrad(w, X[i], y[i], la)
 
-    return np.sum(logreg_sgrad(w, X[i_batch], y[i_batch], la))/len(i_batch) + la * regularizer_grad(w)
-
-
+    return grad_sum/len(i_batch) + la * regularizer_grad(w)
 
 def sample_matrix_logreg_sgrad(W, X, y, la, i_batch):
     """
@@ -84,11 +86,11 @@ def sample_matrix_logreg_sgrad(W, X, y, la, i_batch):
     :return: matrix of minibatch stochastic gradients
     """
     V = np.full(W.shape, np.nan)
-    if len(X.shape ==2):#(matrix) homogeneus case
+    if len(X.shape) == 2:#(matrix) homogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
             V[i] = sample_logreg_sgrad(W[i], X, y, la, i_batch)
 
-    elif len(X.shape ==3): #(tenzor) heterogeneus case
+    elif len(X.shape) == 3: #(tenzor) heterogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
             V[i] = sample_logreg_sgrad(W[i], X[i], y, la, i_batch)
     else:
