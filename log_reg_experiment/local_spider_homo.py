@@ -255,9 +255,9 @@ step_size = init_stepsize(X, la,num_local_steps)
 if epoch_size is None:
     epoch_size = init_epoch_size(X, batch_size)
 
-it_comm = 0 # current iteration of communication
-
 w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev = init_estimates (X, y, la, num_workers, is_continue, experiment, logs_path, loss_func)
+
+it_comm = its_comm[-1] # current iteration of communication
 
 global_it = 0 #iterator of while loop
 
@@ -270,7 +270,7 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
 
     for t in range(epoch_size):
 
-        i_batch =  np.random.choice(data_length_total, batch_size) #generate uniformly subset
+        i_batch = np.random.choice(data_length_total, batch_size) #generate uniformly subset
         V = sample_matrix_logreg_sgrad(W, X, y, la, i_batch) - sample_matrix_logreg_sgrad(W_prev, X, y, la, i_batch)  + V_prev # (7th)
 
         if t % num_local_steps ==0:
@@ -286,7 +286,7 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
             its_comm.append(it_comm)
             #ws_avg.append(w_avg)
             loss.append(logreg_loss(w_avg, X, y, la))
-            epochs.append(global_it + t/epoch_size)
+            epochs.append(its_comm[-1]*num_local_steps/epoch_size)
             if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:
                 print("{4}, global_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),global_it, experiment))
             if it_comm % NUM_GLOBAL_STEPS == 0:
