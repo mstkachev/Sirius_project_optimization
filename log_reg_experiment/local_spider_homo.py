@@ -51,6 +51,7 @@ is_continue = args.is_continue #means that we want (or do not want) to continue 
 launch_number = args.launch_number
 tolerance = args.tolerance
 
+
 #debug section
 """
 max_it = 100
@@ -266,14 +267,15 @@ global_it = 0 #iterator of while loop
 while global_it < max_it and f_grad_norms[-1] > convergense_eps:
 
     #print (global_it, max_it, convergense_eps, f_grad_norms[-1])
-    #TODO: think about initialization before epochs
 
     W = W_prev - step_size * V_prev # do a step for all workers (5th)
 
     for t in range(epoch_size):
+        # TODO: fix that every worker has the same batch
 
-        i_batch = np.random.choice(data_length_total, batch_size) #generate uniformly subset
-        V = sample_matrix_logreg_sgrad(W, X, y, la, i_batch) - sample_matrix_logreg_sgrad(W_prev, X, y, la, i_batch)  + V_prev # (7th)
+        batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
+
+        V = sample_matrix_logreg_sgrad(W, X, y, la, batch_list) - sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)  + V_prev # (7th)
 
         if t % num_local_steps ==0:
             w_avg = np.mean(W, axis=0)  #(9th)
