@@ -43,11 +43,30 @@ dataset = args.dataset
 loss_func = args.loss_func
 is_homogeneous = args.is_homogeneous
 
+#debug section
+
+"""
+num_workers = 20
+dataset = 'a9a'
+loss_func = 'log-reg' 
+is_homogeneous = 0
+
 assert (loss_func == "log-reg") # our experiments for logistic regression only
 assert (is_homogeneous in [0,1])
 assert (num_workers >= 1)
+"""
 
-# we assume that we will not run for n_workers = 1 in heterogeneous case
+def nan_check (lst):
+    """
+    Check whether has any item of list np.nan elements
+    :param lst: list of datafiles (eg. numpy.ndarray)
+    :return:
+    """
+    for i, item in enumerate (lst):
+        if np.sum(np.isnan(item)) > 0:
+            raise ValueError("nan files in item {0}".format(i))
+
+# we assume that we will not run for num_workers = 1 in heterogeneous case
 if not is_homogeneous:
     if num_workers == 1:
         raise ValueError("num_workers must be more than 1 in heterogeneous case")
@@ -96,39 +115,62 @@ if np.sum(np.isnan(data_dense)) > 0:
 print ("Data shape: ", data_dense.shape)
 
 #for homogeneus case X is a 2d array
-#for heterogeneus case X is a 3d array
+#for heterogeneus case X is a list of 2d arrays
 
 X = np.nan
 y = np.nan
 
-#if is_homogeneous:
-# hetero and homo both datasets preprocessing n
-X = data_dense
-y = enc_labels
-assert len(X.shape) == 2
-assert len(y.shape) == 1
-data_len = len(enc_labels)
-train_d = X.shape[0]
-#else:
-#Maxim's code here
-raise NotImplementedError
-
-#assert ((X,y) == (None, None))
-
-if np.sum(np.isnan(y)) > 0:
-    raise ValueError("nan values of labels")
-
-if np.sum(np.isnan(X)) > 0:
-    raise ValueError("nan values in data matrix")
-
 la = 0.1 #regularization parameter
-
 data_info = [la]
 
-# Save data
-np.save(data_path + 'X', X)
-np.save(data_path + 'y', y)
+
+if is_homogeneous:
+    X = data_dense
+    y = enc_labels
+    assert len(X.shape) == 2
+    assert len(y.shape) == 1
+    data_len = len(enc_labels)
+    train_d = X.shape[0]
+    nan_check([X,y])
+    np.save(data_path + 'X', X)
+    np.save(data_path + 'y', y)
+else:
+    data_dense = np.hstack((data_dense, enc_labels[:, np.newaxis])) # hstack y-label to the dataset
+    A = data_dense[np.where(enc_labels == - 1)]
+    B = data_dense[np.where(enc_labels == 1)]
+    K = num_workers  # количество рабочих, заменить имя справа, если я не угадал
+    C = []
+    z = np.zeros((0, data_dense.shape[1]))
+    for i in range(K):
+        C.append(z)
+    h = 2 * A.shape[0] / ((K - 1) * K)
+    h = max(int(h), 1)
+    # print(h)
+    hh = 2 * B.shape[0] / ((K - 1) * K)
+    hh = max(int(hh), 1)
+    # print(hh)
+    for i in range(1, K - 1):
+        C[i] = np.vstack((C[i], A[int((h * i * (i - 1) / 2)): int((h * i * (i + 1) / 2))]))
+        C[-i - 1] = np.vstack((C[-i - 1], B[int((hh * i * (i - 1) / 2)): int((hh * i * (i + 1) / 2))]))
+    C[K - 1] = np.vstack((C[K - 1], A[int((h * (K - 1) * (K - 2) / 2)):]))
+    C[0] = np.vstack((C[0], B[int((hh * (K - 1) * (K - 2) / 2)):]))
+
+    list(map(np.random.shuffle, C))
+
+    y = [np.squeeze(np.asarray(C[i][:, -1])) for i in range(len(C))]
+    X = [C[i][:, :-1] for i in range(len(C))]  # remove y-label from the dataset
+
+    nan_check(y)
+    nan_check(X)
+    for i in range (len(X)):
+        print ("worker {0} has {1} datasamples and {2} labels".format(i, X[i].shape[0], y[i].shape[0]))
+        np.save(data_path + 'X_{0}_nw{1}_{2}'.format(dataset, num_workers, i), X[i])
+        np.save(data_path + 'y_{0}_nw{1}_{2}'.format(dataset, num_workers, i), y[i].flatten())
+        np.save(data_path + 'data_info', data_info)
+
 np.save(data_path + 'data_info', data_info)
+# Save data
+
 
 
 

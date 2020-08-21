@@ -26,9 +26,11 @@ from numpy.linalg import norm
 
 from logreg_functions import *
 
-"""
+
 parser = argparse.ArgumentParser(description='Run NSYNC algorithm')
-parser.add_argument('--max_it', action='store', dest='max_it', type=int, default=None, help='Maximum number of iterations')
+parser.add_argument('--max_epochs', action='store', dest='max_epochs', type=int, default=None, help='Maximum number of epochs')
+parser.add_argument('--max_num_comm', action='store', dest='max_num_comm', type=int, default=None, help='Maximum number of communications')
+
 parser.add_argument('--batch_size', action='store', dest='batch_size', type=int, default=1, help='Minibatch size')
 parser.add_argument('--num_workers', action='store', dest='num_workers', type=int, default=10, help='Number of workers')
 parser.add_argument('--epoch_size', action='store', dest='epoch_size', type=int, default=None, help='Epoch size')
@@ -41,7 +43,8 @@ parser.add_argument('--tol', action='store', dest='tolerance', type=float, defau
 
 args = parser.parse_args()
 
-max_it = args.max_it
+max_num_comm = args.max_num_comm
+max_epochs = args.max_epochs
 batch_size = args.batch_size
 num_workers = args.num_workers
 epoch_size = args.epoch_size
@@ -55,7 +58,8 @@ tolerance = args.tolerance
 
 #debug section
 """
-max_it = 100
+max_epochs = None
+max_epochs = 100
 batch_size = 20
 num_workers = 20
 epoch_size = None
@@ -64,7 +68,7 @@ dataset = "mushrooms"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
 launch_number = 1
 tolerance = 1e-16
-
+"""
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
 
@@ -76,8 +80,11 @@ loss_func = "log-reg"
 convergense_eps = tolerance
 
 
-if max_it is None:
-    max_it = np.inf
+if max_epochs is None:
+    max_epochs = np.inf
+
+if max_num_comm is None:
+    max_num_comm = np.inf
 
 assert (batch_size >= 1)
 assert (num_workers >= 1)
@@ -116,8 +123,8 @@ def init_epoch_size(X, batch_size):
     temp = int(n / batch_size)
     return temp if temp % num_local_steps == 0 else temp - (temp % num_local_steps) + num_local_steps
 
-def continue_criterion (it, max_it, convergense_eps, f_grad_norm):
-    return it < max_it and f_grad_norm < convergense_eps
+def continue_criterion (it, max_epochs, convergense_eps, f_grad_norm):
+    return it < max_epochs and f_grad_norm < convergense_eps
 
 def load_data (experiment, logs_path):
     """
@@ -263,11 +270,14 @@ w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev = init_estimates (X
 
 it_comm = its_comm[-1] # current iteration of communication
 
-global_it = 0 #iterator of while loop
+epoch_it = 0 #iterator of while loop
 
-while global_it < max_it and f_grad_norms[-1] > convergense_eps:
+#TODO: check W and V in debug mode for hetero case
+#TODO: check W and V in debug mode for hetero case
+#TODO: think about epoch_size initialization
+while epoch_it < max_epochs and its_comm[-1] < max_num_comm and f_grad_norms[-1] > convergense_eps:
 
-    #print (global_it, max_it, convergense_eps, f_grad_norms[-1])
+    #print (epoch_it, max_epochs, convergense_eps, f_grad_norms[-1])
 
     W = W_prev - step_size * V_prev # do a step for all workers (5th)
 
@@ -293,7 +303,7 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
             loss.append(logreg_loss(w_avg, X, y, la))
             epochs.append(its_comm[-1]*num_local_steps/epoch_size)
             if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:
-                print("{4}, global_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),global_it, experiment))
+                print("{4}, epoch_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),epoch_it, experiment))
             if it_comm % NUM_GLOBAL_STEPS == 0:
                 #TODO: implement function below
                 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
@@ -305,7 +315,7 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
     W_prev = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0)  # (16th)
     f_grad = logreg_grad(w_avg, X, y,la)
     V_prev =  np.repeat(f_grad[np.newaxis, :], num_workers, axis=0)#(17th)
-    global_it += 1
+    epoch_it += 1
 
 
 ##

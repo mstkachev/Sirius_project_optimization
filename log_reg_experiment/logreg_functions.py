@@ -86,13 +86,13 @@ def sample_matrix_logreg_sgrad(W, X, y, la, batch_list):
     :return: matrix of minibatch stochastic gradients
     """
     V = np.full(W.shape, np.nan)
-    if len(X.shape) == 2:#(matrix) homogeneus case
+    if type(X) == np.ndarray or type(X) == np.matrix: #homogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
             V[i] = sample_logreg_sgrad(W[i], X, y, la, batch_list[i])
 
-    elif len(X.shape) == 3: #(tenzor) heterogeneus case
+    elif type(X) == list: #(tenzor) heterogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
-            V[i] = sample_logreg_sgrad(W[i], X[i], y, la, batch_list[i])
+            V[i] = sample_logreg_sgrad(W[i], X[i], y[i], la, batch_list[i])
     else:
         raise ValueError("W has to be 2d or 3d")
     return V
