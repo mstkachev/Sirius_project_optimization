@@ -26,6 +26,7 @@ from numpy.linalg import norm
 
 from logreg_functions import *
 
+"""
 parser = argparse.ArgumentParser(description='Run NSYNC algorithm')
 parser.add_argument('--max_it', action='store', dest='max_it', type=int, default=None, help='Maximum number of iterations')
 parser.add_argument('--batch_size', action='store', dest='batch_size', type=int, default=1, help='Minibatch size')
@@ -55,7 +56,7 @@ tolerance = args.tolerance
 #debug section
 """
 max_it = 100
-batch_size = 10
+batch_size = 20
 num_workers = 20
 epoch_size = None
 num_local_steps = 10
@@ -63,7 +64,7 @@ dataset = "mushrooms"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
 launch_number = 1
 tolerance = 1e-16
-"""
+
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
 
@@ -297,8 +298,9 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
                 #TODO: implement function below
                 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
 
-        W = W_prev - step_size * V_prev  # do a step for all workers (12th)
-
+        W_prev = W
+        W = W - step_size * V  # do a step for all workers (12th)
+        V_prev = V
     w_avg = np.mean(W, axis=0)  # (15th)
     W_prev = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0)  # (16th)
     f_grad = logreg_grad(w_avg, X, y,la)
