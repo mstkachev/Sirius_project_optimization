@@ -122,7 +122,7 @@ def init_stepsize(X, la, num_local_steps, batch_size):
 
     #return 1/(8 * num_local_steps * L)
     #return np.sqrt(batch_size) / (np.sqrt(n) * L)
-    return 1 /(2*L)   # homo case
+    return 1 /(50*L)   # homo case
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape

@@ -61,8 +61,8 @@ tolerance = args.tolerance
 
 
 #debug section
-
 """
+
 max_epochs = None
 max_num_comm = None
 #max_epochs = 100
@@ -124,8 +124,9 @@ def init_stepsize(X, la, num_local_steps, batch_size):
 
     #return 1/(8 * num_local_steps * L)
     #return np.sqrt(batch_size) / (np.sqrt(n) * L)
-    #return 1 /(10*L)
-    return 0.001  # homo case
+    #print (1 /(2*L))
+    return 1 /(10*L)
+    #return 0.0005  # homo case
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
@@ -191,7 +192,7 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
     :param loss_func:
     :return:
     """
-    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev = np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev= np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     N_X, d = X.shape
 
     if is_continue:
@@ -218,14 +219,14 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
 
     W_prev = np.repeat(w_0[np.newaxis, :], num_workers, axis=0)
 
-    V_prev, M_prev = np.zeros(d), np.zeros(d)
+    V_prev = np.zeros(d)
 
     #check whether data initialized
-    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev])
+    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev])
 
     assert (W_prev.shape == (num_workers, d))
 
-    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev
+    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev
 
 def save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment):
     np.save(logs_path + 'loss' + '_' + experiment, np.array(loss))
@@ -241,7 +242,7 @@ user_dir = os.path.expanduser('~/')
 
 project_path = os.getcwd() + "/"
 
-experiment_name = "local_adam_homo"
+experiment_name = "local_fed-adam_homo"
 
 experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
 
@@ -271,12 +272,14 @@ currentDT = datetime.datetime.now()
 print (currentDT.strftime("%Y-%m-%d %H:%M:%S"))
 print (experiment)
 
+#TODO: init stepsize
 step_size = init_stepsize(X, la, num_local_steps, batch_size)
 
+#TODO: init epochs
 if epoch_size is None:
     epoch_size = init_epoch_size(X, batch_size)
 
-w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev = init_estimates (X, y, la, num_workers, is_continue, experiment, logs_path, loss_func)
+w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev = init_estimates (X, y, la, num_workers, is_continue, experiment, logs_path, loss_func)
 
 beta1 = 0.9
 beta2 = 0.99
@@ -286,33 +289,36 @@ it_comm = its_comm[-1] # current iteration of communication
 it = 0
 epoch_it = 0 #iterator of while loop
 
+W_K = W_prev #W_K is the W after num_local_steps iter
+D_prev = np.zeros (W_prev.shape)
+
 while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and f_grad_norms[-1] > convergense_eps:
     it += 1
 
-    batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
+    #TODO:think about stepsize
+    #step_size = np.sqrt(data_length_total/it)
 
+    batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
     f_sgrad_matrix = sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)
 
-    M = beta1*M_prev + (1 - beta1)*f_sgrad_matrix
-    V = beta2*V_prev + (1 - beta2)*f_sgrad_matrix**2
-
-    M_hat = M / (1 - beta1**it)
-    V_hat = V / (1 - beta2**it)
-
-    W = W_prev - (step_size/(np.sqrt(V_hat) + delta)) * M_hat  # do a step for all workers
+    W = W_prev - step_size * f_sgrad_matrix # do a step for all workers
 
     if it % num_local_steps == 0:
-        w_avg = np.mean(W, axis=0)
-        m_avg = np.mean(M, axis=0)
-        v_avg = np.mean(V, axis=0)
+        D = W - W_K
 
-        W = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0) #clone averaged point to each worker (broadcast)
-        M = np.repeat(m_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
-        V = np.repeat(v_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
+        d_avg = np.mean(D, axis=0)
+        D = np.repeat(d_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
+
+        D = beta1*D_prev + (1 - beta1)*D
+
+        V = beta2 * V_prev + (1 - beta2) * D ** 2
+
+        W_K = W_K + (step_size/(np.sqrt(V) + delta))*D
+        V_prev = V
 
         #(below)save current state of the iteration process
+        w_avg = np.mean(W_K, axis=0)
         it_comm += 1
-
         f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X, y,la),ord=2))
         its_comm.append(it_comm)
         #ws_avg.append(w_avg)
@@ -322,11 +328,10 @@ while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and 
         if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:
             print("{4}, it: {5}, epoch_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),epoch_it, experiment, it))
         if it_comm % NUM_GLOBAL_STEPS == 0:
+            #TODO: implement function below
             save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
-
     W_prev = W
-    M_prev = M
-    V_prev = V
+
 ##
 
 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
