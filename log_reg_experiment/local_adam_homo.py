@@ -291,7 +291,7 @@ epoch_it = 0 #iterator of while loop
 while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and f_grad_norms[-1] > convergense_eps:
     it += 1
 
-    step_size = np.sqrt(data_length_total/it)
+    #step_size = np.sqrt(data_length_total/it)
     batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
 
     f_sgrad_matrix = sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)
