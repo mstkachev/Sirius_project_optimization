@@ -121,8 +121,8 @@ def init_stepsize(X, la, num_local_steps, batch_size):
     L = (1 / (4 * n)) * la_max + la * 2 #lipshitz constant
 
     #return 1/(8 * num_local_steps * L)
-    #return np.sqrt(batch_size) / (np.sqrt(n) * L)
-    return 1 /(50*L)   # homo case
+    return 1 / (num_local_steps * L)
+    #return 1 /(50*L)   # homo case
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
@@ -256,24 +256,35 @@ la = data_info[0]
 
 assert (type(la) == np.float64)
 
-X = np.load(data_path + 'X.npy')
-y = np.load(data_path + 'y.npy')
-N_X, d = X.shape
+X = []
+y = []
+data_length = []
 
-data_length_total = N_X
+for i in range (num_workers):
+    X.append(np.load(data_path + 'X_{0}_nw{1}_{2}.npy'.format(dataset, num_workers, i)))
+    y.append(np.load(data_path + 'y_{0}_nw{1}_{2}.npy'.format(dataset, num_workers, i)))
+    data_length.append(X[-1].shape[0])
+
+#assert (len(X) == 0)
+#assert (len(y) == 0)
+#assert (len(data_length) == 0)
+
+X_full = np.load(data_path + 'X.npy')
+y_full = np.load(data_path + 'y.npy')
+data_length_total, d = X_full.shape
 
 currentDT = datetime.datetime.now()
 print (currentDT.strftime("%Y-%m-%d %H:%M:%S"))
 print (experiment)
 
 #TODO: init stepsize
-#step_size = init_stepsize(X, la, num_local_steps, batch_size)
+step_size = init_stepsize(X, la, num_local_steps, batch_size)
 
 #TODO: init epochs
 if epoch_size is None:
     epoch_size = init_epoch_size(X, batch_size)
 
-w_0, loss, f_grad_norms, its_comm, epochs,  W_prev = init_estimates (X, y, la, num_workers, is_continue, experiment, logs_path, loss_func)
+w_0, loss, f_grad_norms, its_comm, epochs,  W_prev = init_estimates (X_full, y_full, la, num_workers, is_continue, experiment, logs_path, loss_func)
 
 it_comm = its_comm[-1] # current iteration of communication
 
@@ -283,8 +294,7 @@ epoch_it = 0 #iterator of while loop
 while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and f_grad_norms[-1] > convergense_eps:
     it += 1
 
-    step_size = np.sqrt(data_length_total/it)
-    batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
+    batch_list = [np.random.choice(data_length[i], batch_size) for i in range(num_workers)] #generate uniformly subset
     W = W_prev - step_size * sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)  # do a step for all workers
 
     if it % num_local_steps == 0:
@@ -294,10 +304,10 @@ while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and 
         #(below)save current state of the iteration process
         it_comm += 1
 
-        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X, y,la),ord=2))
+        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X_full, y_full, la),ord=2))
         its_comm.append(it_comm)
         #ws_avg.append(w_avg)
-        loss.append(logreg_loss(w_avg, X, y, la))
+        loss.append(logreg_loss(w_avg, X_full, y_full, la))
         epochs.append(it * batch_size/epoch_size)
 
         if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:

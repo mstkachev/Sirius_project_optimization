@@ -125,7 +125,7 @@ def init_stepsize(X, la, num_local_steps, batch_size):
     #return 1/(8 * num_local_steps * L)
     #return np.sqrt(batch_size) / (np.sqrt(n) * L)
     #print (1 /(2*L))
-    return 1 /(10*L)
+    return 1 /(25*L)
     #return 0.0005  # homo case
 
 def init_epoch_size(X, batch_size):
