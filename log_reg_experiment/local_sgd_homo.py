@@ -1,7 +1,7 @@
 """
 (c) Igor Sokolov
 experiment for logistic regression
-based on the paper https://arxiv.org/abs/1912.06036v1
+based on the paper
 
 (i th) as a comments means that author refers to the i-th line of the original algorithm of the paper
 
