@@ -101,16 +101,17 @@ print ("Data shape: ", data_dense.shape)
 X = np.nan
 y = np.nan
 
-if is_homogeneous:
-    X = data_dense
-    y = enc_labels
-    assert len(X.shape) == 2
-    assert len(y.shape) == 1
-    data_len = len(enc_labels)
-    train_d = X.shape[0]
-else:
-    #Maxim's code here
-    raise NotImplementedError
+#if is_homogeneous:
+# hetero and homo both datasets preprocessing n
+X = data_dense
+y = enc_labels
+assert len(X.shape) == 2
+assert len(y.shape) == 1
+data_len = len(enc_labels)
+train_d = X.shape[0]
+#else:
+#Maxim's code here
+raise NotImplementedError
 
 #assert ((X,y) == (None, None))
 

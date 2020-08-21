@@ -75,24 +75,24 @@ def sample_logreg_sgrad(w, X, y, la, i_batch):
 
     return grad_sum/len(i_batch) + la * regularizer_grad(w)
 
-def sample_matrix_logreg_sgrad(W, X, y, la, i_batch):
+def sample_matrix_logreg_sgrad(W, X, y, la, batch_list):
     """
     Returns matrix of minibatches.
     :param W: matrix of target variables. Each row corresponds to the particular worker
     :param X: data matrix
     :param y: label column
     :param la: regularization parameter
-    :param i_batch: indices of batch of datasamples
+    :param i_batch: list of indices of batch of datasamples
     :return: matrix of minibatch stochastic gradients
     """
     V = np.full(W.shape, np.nan)
     if len(X.shape) == 2:#(matrix) homogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
-            V[i] = sample_logreg_sgrad(W[i], X, y, la, i_batch)
+            V[i] = sample_logreg_sgrad(W[i], X, y, la, batch_list[i])
 
     elif len(X.shape) == 3: #(tenzor) heterogeneus case
         for i in range (W.shape[0]): #for each worker compute minibatch stochastic gradient
-            V[i] = sample_logreg_sgrad(W[i], X[i], y, la, i_batch)
+            V[i] = sample_logreg_sgrad(W[i], X[i], y, la, batch_list[i])
     else:
         raise ValueError("W has to be 2d or 3d")
     return V

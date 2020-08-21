@@ -26,7 +26,6 @@ from numpy.linalg import norm
 
 from logreg_functions import *
 
-"""
 parser = argparse.ArgumentParser(description='Run NSYNC algorithm')
 parser.add_argument('--max_it', action='store', dest='max_it', type=int, default=None, help='Maximum number of iterations')
 parser.add_argument('--batch_size', action='store', dest='batch_size', type=int, default=1, help='Minibatch size')
@@ -56,7 +55,7 @@ tolerance = args.tolerance
 #debug section
 """
 max_it = 100
-batch_size = 20
+batch_size = 10
 num_workers = 20
 epoch_size = None
 num_local_steps = 10
@@ -64,7 +63,7 @@ dataset = "mushrooms"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
 launch_number = 1
 tolerance = 1e-16
-
+"""
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
 
@@ -96,7 +95,7 @@ def myrepr(x):
 ######################
 
 
-def init_stepsize(X, la, num_local_steps, batch_size):
+def init_stepsize(X, la, num_local_steps):
     """
     Returns stepsize
     :param X: data matrix
@@ -109,7 +108,7 @@ def init_stepsize(X, la, num_local_steps, batch_size):
     L = (1 / (4 * n)) * la_max + la * 2 #lipshitz constant
 
     #return 1/(8 * num_local_steps * L)  #stepsize given by the original paper Parallel Restarted SPIDER (PRS stepsize)
-    return np.sqrt(batch_size) / (np.sqrt(n) * L)          #stepsize given by spider boost paper (SP stepsize)
+    return 1 / (np.sqrt(n) * L)          #stepsize given by spider boost paper (SP stepsize)
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
@@ -225,7 +224,7 @@ user_dir = os.path.expanduser('~/')
 
 project_path = os.getcwd() + "/"
 
-experiment_name = "local_spider_homo"
+experiment_name = "local_spider_hetero"
 
 experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
 
@@ -244,18 +243,27 @@ la = data_info[0]
 #print ("la: ", la, type(la))
 
 assert (type(la) == np.float64)
+X = []
+y = []
+data_length = []
+for i in range (num_workers):
+    X.append(np.load(data_path + "X_{0}.npy".format(i)))
+    y.append(np.load(data_path + "y_{0}.npy".format(i)))
+    data_length.append(X[-1].shape[0])
+
+assert (len(X) == 0)
+assert (len(y) == 0)
+assert (len(data_length) == 0)
 
 X = np.load(data_path + 'X.npy')
 y = np.load(data_path + 'y.npy')
 N_X, d = X.shape
 
-data_length_total = N_X
-
 currentDT = datetime.datetime.now()
 print (currentDT.strftime("%Y-%m-%d %H:%M:%S"))
 print (experiment)
 
-step_size = init_stepsize(X, la,num_local_steps, batch_size)
+step_size = init_stepsize(X, la,num_local_steps)
 if epoch_size is None:
     epoch_size = init_epoch_size(X, batch_size)
 
@@ -274,15 +282,15 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
     for t in range(epoch_size):
         # TODO: fix that every worker has the same batch
 
-        batch_list = [np.random.choice(data_length_total, batch_size) for i in range(num_workers)] #generate uniformly subset
+        batch_list = [np.random.choice(data_length[i], batch_size) for i in range(num_workers)] #generate uniformly subset
 
         V = sample_matrix_logreg_sgrad(W, X, y, la, batch_list) - sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)  + V_prev # (7th)
 
         if t % num_local_steps ==0:
             w_avg = np.mean(W, axis=0)  #(9th)
             v_avg = np.mean(V, axis=0)  #(10th)
-            W = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0)#clone averaged point to each worker (broadcast)
-            V = np.repeat(v_avg[np.newaxis, :], num_workers, axis=0)#clone averaged gradient estimation to each worker (broadcast)
+            W_prev = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0)#clone averaged point to each worker (broadcast)
+            V_prev = np.repeat(v_avg[np.newaxis, :], num_workers, axis=0)#clone averaged gradient estimation to each worker (broadcast)
 
             #(below)save current state of the iteration process
             it_comm += 1
@@ -298,9 +306,8 @@ while global_it < max_it and f_grad_norms[-1] > convergense_eps:
                 #TODO: implement function below
                 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
 
-        W_prev = W
-        W = W - step_size * V  # do a step for all workers (12th)
-        V_prev = V
+        W = W_prev - step_size * V_prev  # do a step for all workers (12th)
+
     w_avg = np.mean(W, axis=0)  # (15th)
     W_prev = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0)  # (16th)
     f_grad = logreg_grad(w_avg, X, y,la)
