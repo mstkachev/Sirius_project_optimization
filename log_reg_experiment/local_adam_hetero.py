@@ -42,6 +42,7 @@ parser.add_argument('--dataset', action='store', dest='dataset', type=str, defau
 parser.add_argument('--launch_number', action='store', dest='launch_number', type=int, default=1, help='launch_number')
 parser.add_argument('--tol', action='store', dest='tolerance', type=float, default=1e-12, help='tolerance')
 
+
 args = parser.parse_args()
 
 max_num_comm = args.max_num_comm
@@ -60,19 +61,20 @@ tolerance = args.tolerance
 
 
 #debug section
+
 """
 max_epochs = None
 max_num_comm = None
 #max_epochs = 100
-max_it = 100
+max_it = 1000
 batch_size = 20
 num_workers = 20
 epoch_size = None
 num_local_steps = 10
-dataset = "mushrooms"
+dataset = "a9a"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
 launch_number = 1
-tolerance = 1e-16
+tolerance = 1e-12
 """
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
@@ -121,8 +123,9 @@ def init_stepsize(X, la, num_local_steps, batch_size):
     L = (1 / (4 * n)) * la_max + la * 2 #lipshitz constant
 
     #return 1/(8 * num_local_steps * L)
-    return 1 / (num_local_steps * L)
-    #return 1 /(50*L)   # homo case
+    #return np.sqrt(batch_size) / (np.sqrt(n) * L)
+    #return 1 /(10*L)
+    return 0.001/num_local_steps  # homo case
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
@@ -188,7 +191,7 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
     :param loss_func:
     :return:
     """
-    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev = np.nan,np.nan, np.nan,np.nan,np.nan, np.nan, np.nan
+    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev = np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     N_X, d = X.shape
 
     if is_continue:
@@ -211,16 +214,18 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
     f_grad_0 = logreg_grad(w_0, X, y, la)
 
     if np.sum(np.isnan(f_grad_norms)) > 0:
-        f_grad_norms = [np.linalg.norm(x=f_grad_0,ord=2)]
+        f_grad_norms = [np.linalg.norm(x=f_grad_0, ord=2)]
 
     W_prev = np.repeat(w_0[np.newaxis, :], num_workers, axis=0)
 
+    V_prev, M_prev = np.zeros(d), np.zeros(d)
+
     #check whether data initialized
-    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev])
+    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev])
 
     assert (W_prev.shape == (num_workers, d))
 
-    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev
+    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev
 
 def save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment):
     np.save(logs_path + 'loss' + '_' + experiment, np.array(loss))
@@ -236,7 +241,7 @@ user_dir = os.path.expanduser('~/')
 
 project_path = os.getcwd() + "/"
 
-experiment_name = "local_sgd_hetero"
+experiment_name = "local_adam_hetero"
 
 experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
 
@@ -277,17 +282,18 @@ currentDT = datetime.datetime.now()
 print (currentDT.strftime("%Y-%m-%d %H:%M:%S"))
 print (experiment)
 
-#TODO: init stepsize
 step_size = init_stepsize(X_full, la, num_local_steps, batch_size)
 
-#TODO: init epochs
 if epoch_size is None:
     epoch_size = init_epoch_size(X_full, batch_size)
 
-w_0, loss, f_grad_norms, its_comm, epochs,  W_prev = init_estimates (X_full, y_full, la, num_workers, is_continue, experiment, logs_path, loss_func)
+w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev, M_prev = init_estimates (X_full, y_full, la, num_workers, is_continue, experiment, logs_path, loss_func)
+
+beta1 = 0.9
+beta2 = 0.99
+delta = 1e-8
 
 it_comm = its_comm[-1] # current iteration of communication
-
 it = 0
 epoch_it = 0 #iterator of while loop
 
@@ -295,16 +301,30 @@ while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and 
     it += 1
 
     batch_list = [np.random.choice(data_length[i], batch_size) for i in range(num_workers)] #generate uniformly subset
-    W = W_prev - step_size * sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)  # do a step for all workers
+
+    f_sgrad_matrix = sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)
+
+    M = beta1*M_prev + (1 - beta1)*f_sgrad_matrix
+    V = beta2*V_prev + (1 - beta2)*f_sgrad_matrix**2
+
+    M_hat = M / (1 - beta1**it)
+    V_hat = V / (1 - beta2**it)
+
+    W = W_prev - (step_size/(np.sqrt(V_hat) + delta)) * M_hat  # do a step for all workers
 
     if it % num_local_steps == 0:
-        w_avg = np.mean(W, axis=0)  #(9th)
+        w_avg = np.mean(W, axis=0)
+        m_avg = np.mean(M, axis=0)
+        v_avg = np.mean(V, axis=0)
+
         W = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0) #clone averaged point to each worker (broadcast)
+        M = np.repeat(m_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
+        V = np.repeat(v_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
 
         #(below)save current state of the iteration process
         it_comm += 1
 
-        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X_full, y_full, la),ord=2))
+        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X_full, y_full,la),ord=2))
         its_comm.append(it_comm)
         #ws_avg.append(w_avg)
         loss.append(logreg_loss(w_avg, X_full, y_full, la))
@@ -313,11 +333,11 @@ while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and 
         if it_comm % int(NUM_GLOBAL_STEPS/100) == 0:
             print("{4}, it: {5}, epoch_it: {3}, it_comm: {0} , epoch: {1}, f_grad_norm: {2}".format(it_comm, round (epochs[-1],4), round (f_grad_norms[-1],4),epoch_it, experiment, it))
         if it_comm % NUM_GLOBAL_STEPS == 0:
-            #TODO: implement function below
             save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
 
     W_prev = W
-
+    M_prev = M
+    V_prev = V
 ##
 
 save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)

@@ -42,6 +42,7 @@ parser.add_argument('--dataset', action='store', dest='dataset', type=str, defau
 parser.add_argument('--launch_number', action='store', dest='launch_number', type=int, default=1, help='launch_number')
 parser.add_argument('--tol', action='store', dest='tolerance', type=float, default=1e-12, help='tolerance')
 
+
 args = parser.parse_args()
 
 max_num_comm = args.max_num_comm
@@ -61,18 +62,19 @@ tolerance = args.tolerance
 
 #debug section
 """
+
 max_epochs = None
 max_num_comm = None
 #max_epochs = 100
-max_it = 100
+max_it = 1000
 batch_size = 20
 num_workers = 20
 epoch_size = None
 num_local_steps = 10
-dataset = "mushrooms"
+dataset = "a9a"
 is_continue = 0 #means that we want (or do not want) to continue previously started experiments
 launch_number = 1
-tolerance = 1e-16
+tolerance = 1e-12
 """
 
 NUM_GLOBAL_STEPS = 1000 #every NUM_GLOBAL_STEPS times of communication we will store our data
@@ -121,8 +123,10 @@ def init_stepsize(X, la, num_local_steps, batch_size):
     L = (1 / (4 * n)) * la_max + la * 2 #lipshitz constant
 
     #return 1/(8 * num_local_steps * L)
+    #return np.sqrt(batch_size) / (np.sqrt(n) * L)
+    #print (1 /(2*L))
     return 1 / (num_local_steps * L)
-    #return 1 /(50*L)   # homo case
+    #return 0.0005  # homo case
 
 def init_epoch_size(X, batch_size):
     n, d = X.shape
@@ -188,7 +192,7 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
     :param loss_func:
     :return:
     """
-    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev = np.nan,np.nan, np.nan,np.nan,np.nan, np.nan, np.nan
+    w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev= np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
     N_X, d = X.shape
 
     if is_continue:
@@ -211,16 +215,18 @@ def init_estimates(X, y, la, num_workers, is_continue, experiment, logs_path, lo
     f_grad_0 = logreg_grad(w_0, X, y, la)
 
     if np.sum(np.isnan(f_grad_norms)) > 0:
-        f_grad_norms = [np.linalg.norm(x=f_grad_0,ord=2)]
+        f_grad_norms = [np.linalg.norm(x=f_grad_0, ord=2)]
 
     W_prev = np.repeat(w_0[np.newaxis, :], num_workers, axis=0)
 
+    V_prev = np.zeros(d)
+
     #check whether data initialized
-    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev])
+    nan_check([w_0, f_grad_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev])
 
     assert (W_prev.shape == (num_workers, d))
 
-    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev
+    return w_0, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev
 
 def save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment):
     np.save(logs_path + 'loss' + '_' + experiment, np.array(loss))
@@ -236,7 +242,7 @@ user_dir = os.path.expanduser('~/')
 
 project_path = os.getcwd() + "/"
 
-experiment_name = "local_sgd_hetero"
+experiment_name = "local_fed-adam_hetero"
 
 experiment = '{0}_{1}_{2}_{3}'.format(experiment_name, batch_size, num_workers, num_local_steps)
 
@@ -284,27 +290,47 @@ step_size = init_stepsize(X_full, la, num_local_steps, batch_size)
 if epoch_size is None:
     epoch_size = init_epoch_size(X_full, batch_size)
 
-w_0, loss, f_grad_norms, its_comm, epochs,  W_prev = init_estimates (X_full, y_full, la, num_workers, is_continue, experiment, logs_path, loss_func)
+w_avg, loss, f_grad_norms, its_comm, epochs,  W_prev, V_prev = init_estimates (X_full, y_full, la, num_workers, is_continue, experiment, logs_path, loss_func)
+
+beta1 = 0.9
+beta2 = 0.99
+delta = 1e-8
 
 it_comm = its_comm[-1] # current iteration of communication
-
 it = 0
 epoch_it = 0 #iterator of while loop
+
+W_K = W_prev #W_K is the W after num_local_steps iter
+D_prev = np.zeros (W_prev.shape)
 
 while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and f_grad_norms[-1] > convergense_eps:
     it += 1
 
+    #TODO:think about stepsize
+    #step_size = np.sqrt(data_length_total/it)
+
     batch_list = [np.random.choice(data_length[i], batch_size) for i in range(num_workers)] #generate uniformly subset
-    W = W_prev - step_size * sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)  # do a step for all workers
+    f_sgrad_matrix = sample_matrix_logreg_sgrad(W_prev, X, y, la, batch_list)
+
+    W = W_prev - step_size * f_sgrad_matrix # do a step for all workers
 
     if it % num_local_steps == 0:
-        w_avg = np.mean(W, axis=0)  #(9th)
-        W = np.repeat(w_avg[np.newaxis, :], num_workers, axis=0) #clone averaged point to each worker (broadcast)
+        D = W - W_K
+
+        d_avg = np.mean(D, axis=0)
+        D = np.repeat(d_avg[np.newaxis, :], num_workers, axis=0)  # clone averaged point to each worker (broadcast)
+
+        D = beta1*D_prev + (1 - beta1)*D
+
+        V = beta2 * V_prev + (1 - beta2) * D ** 2
+
+        W_K = W_K + (step_size/(np.sqrt(V) + delta))*D
+        V_prev = V
 
         #(below)save current state of the iteration process
+        w_avg = np.mean(W_K, axis=0)
         it_comm += 1
-
-        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X_full, y_full, la),ord=2))
+        f_grad_norms.append(np.linalg.norm(x=logreg_grad(w_avg, X_full, y_full,la),ord=2))
         its_comm.append(it_comm)
         #ws_avg.append(w_avg)
         loss.append(logreg_loss(w_avg, X_full, y_full, la))
@@ -315,7 +341,6 @@ while it < max_it and epoch_it < max_epochs and its_comm[-1] < max_num_comm and 
         if it_comm % NUM_GLOBAL_STEPS == 0:
             #TODO: implement function below
             save_data(loss, f_grad_norms, its_comm, epochs, w_avg, logs_path, experiment)
-
     W_prev = W
 
 ##
