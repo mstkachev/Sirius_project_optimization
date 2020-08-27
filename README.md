@@ -1,2 +1,2 @@
-# On local methods for non-convex federative optimization
+# On local methods for non-convex federated optimization
 
