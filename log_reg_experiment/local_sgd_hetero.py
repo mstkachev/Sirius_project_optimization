@@ -1,13 +1,12 @@
 """
 (c) Igor Sokolov
-experiment for logistic regression
+https://github.com/mstkachev/Sirius_project_optimization
+
+experiment for logistic regression with non-convex regularizer
+
 based on the paper
 
-(i th) as a comments means that author refers to the i-th line of the original algorithm of the paper
-
-W_prev - workers matrix of current point
-V_prev - workers matrix of current vector v (each row correspond to the particular worker)
-
+heterogeneous setting
 """
 
 import numpy as np

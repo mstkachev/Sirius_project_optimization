@@ -1,3 +1,10 @@
+"""
+(c) Igor Sokolov
+https://github.com/mstkachev/Sirius_project_optimization
+
+"""
+
+
 LAUNCH_NUMBERS = 2
 launch_number_ar = np.arange (1, LAUNCH_NUMBERS)
 

@@ -1,5 +1,6 @@
 """
 (c) Igor Sokolov
+https://github.com/mstkachev/Sirius_project_optimization
 
 A script for the data preprocessing before launch an algorithm
 """

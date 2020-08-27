@@ -1,3 +1,10 @@
+"""
+(c) Igor Sokolov
+https://github.com/mstkachev/Sirius_project_optimization
+
+
+"""
+
 import numpy as np
 import random
 import time
